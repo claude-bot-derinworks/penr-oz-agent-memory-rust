@@ -57,7 +57,11 @@ impl SessionStore {
         // sqlite::memory: databases are per-connection; a pool with more than
         // one connection would give each connection its own isolated database,
         // causing migrations and data to be invisible across connections.
-        let max_conns = if database_url.contains(":memory:") { 1 } else { 5 };
+        let max_conns = if database_url.contains(":memory:") {
+            1
+        } else {
+            5
+        };
         let pool = SqlitePoolOptions::new()
             .max_connections(max_conns)
             .connect_with(options)
@@ -82,18 +86,16 @@ impl SessionStore {
     pub async fn create(&self, tags: Vec<String>) -> Result<Session, SessionError> {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now().to_rfc3339();
-        let tags_json = serde_json::to_string(&tags)
-            .map_err(|e| SessionError::Serialization(e.to_string()))?;
+        let tags_json =
+            serde_json::to_string(&tags).map_err(|e| SessionError::Serialization(e.to_string()))?;
 
-        sqlx::query(
-            "INSERT INTO sessions (id, created_at, updated_at, tags) VALUES (?, ?, ?, ?)",
-        )
-        .bind(&id)
-        .bind(&now)
-        .bind(&now)
-        .bind(&tags_json)
-        .execute(&self.pool)
-        .await?;
+        sqlx::query("INSERT INTO sessions (id, created_at, updated_at, tags) VALUES (?, ?, ?, ?)")
+            .bind(&id)
+            .bind(&now)
+            .bind(&now)
+            .bind(&tags_json)
+            .execute(&self.pool)
+            .await?;
 
         Ok(Session {
             id,
@@ -144,7 +146,11 @@ impl SessionStore {
             "SELECT id, created_at, updated_at, tags \
              FROM sessions ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
         )
-        .bind(if limit == 0 { -1i64 } else { limit.min(i64::MAX as u64) as i64 })
+        .bind(if limit == 0 {
+            -1i64
+        } else {
+            limit.min(i64::MAX as u64) as i64
+        })
         .bind(offset.min(i64::MAX as u64) as i64)
         .fetch_all(&self.pool)
         .await?
@@ -224,7 +230,10 @@ mod tests {
     #[tokio::test]
     async fn get_returns_none_for_unknown_id() {
         let store = make_store().await;
-        let result = store.get("nonexistent").await.expect("get should not error");
+        let result = store
+            .get("nonexistent")
+            .await
+            .expect("get should not error");
         assert!(result.is_none());
     }
 
@@ -257,8 +266,14 @@ mod tests {
         assert_eq!(sessions.len(), 2);
 
         // Newest first – s2 was created after s1
-        assert_eq!(sessions[0].id, s2.id, "s2 should be the first session (newest)");
-        assert_eq!(sessions[1].id, s1.id, "s1 should be the second session (oldest)");
+        assert_eq!(
+            sessions[0].id, s2.id,
+            "s2 should be the first session (newest)"
+        );
+        assert_eq!(
+            sessions[1].id, s1.id,
+            "s1 should be the second session (oldest)"
+        );
     }
 
     #[tokio::test]
@@ -275,7 +290,10 @@ mod tests {
         store.create(vec![]).await.expect("create s2");
         store.create(vec![]).await.expect("create s3");
 
-        let sessions = store.list(2, 0).await.expect("list with limit should succeed");
+        let sessions = store
+            .list(2, 0)
+            .await
+            .expect("list with limit should succeed");
         assert_eq!(sessions.len(), 2);
     }
 
@@ -322,6 +340,9 @@ mod tests {
             .touch("no-such-id")
             .await
             .expect("touch should not error");
-        assert!(!found, "touch should return false for a non-existent session");
+        assert!(
+            !found,
+            "touch should return false for a non-existent session"
+        );
     }
 }

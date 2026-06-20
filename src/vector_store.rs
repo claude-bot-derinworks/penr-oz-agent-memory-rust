@@ -475,7 +475,10 @@ mod tests {
             .await;
 
         let result = make_store(&server.uri()).ensure_collection().await;
-        assert!(matches!(result, Err(VectorStoreError::Api { status: 500, .. })));
+        assert!(matches!(
+            result,
+            Err(VectorStoreError::Api { status: 500, .. })
+        ));
     }
 
     // -----------------------------------------------------------------------
@@ -498,14 +501,22 @@ mod tests {
 
         let store = make_store(&server.uri());
         let id = store
-            .upsert(None, vec![0.1, 0.2, 0.3], "hello".to_string(), HashMap::new())
+            .upsert(
+                None,
+                vec![0.1, 0.2, 0.3],
+                "hello".to_string(),
+                HashMap::new(),
+            )
             .await
             .expect("upsert should succeed");
 
         // A generated UUID should be non-empty
         assert!(!id.is_empty());
         // Should be a valid UUID
-        assert!(uuid::Uuid::parse_str(&id).is_ok(), "returned id should be a valid UUID");
+        assert!(
+            uuid::Uuid::parse_str(&id).is_ok(),
+            "returned id should be a valid UUID"
+        );
     }
 
     #[tokio::test]
@@ -540,7 +551,10 @@ mod tests {
     #[tokio::test]
     async fn upsert_rejects_reserved_text_key_in_metadata() {
         let mut metadata = HashMap::new();
-        metadata.insert("text".to_string(), serde_json::Value::String("oops".to_string()));
+        metadata.insert(
+            "text".to_string(),
+            serde_json::Value::String("oops".to_string()),
+        );
 
         let result = make_store("http://unused")
             .upsert(None, vec![0.1, 0.2, 0.3], "hello".to_string(), metadata)
@@ -563,7 +577,10 @@ mod tests {
             .upsert(None, vec![0.1], "hello".to_string(), HashMap::new())
             .await;
 
-        assert!(matches!(result, Err(VectorStoreError::Api { status: 400, .. })));
+        assert!(matches!(
+            result,
+            Err(VectorStoreError::Api { status: 400, .. })
+        ));
     }
 
     // -----------------------------------------------------------------------
@@ -648,6 +665,9 @@ mod tests {
             .search(vec![0.1, 0.2, 0.3], 5, None)
             .await;
 
-        assert!(matches!(result, Err(VectorStoreError::Api { status: 503, .. })));
+        assert!(matches!(
+            result,
+            Err(VectorStoreError::Api { status: 503, .. })
+        ));
     }
 }

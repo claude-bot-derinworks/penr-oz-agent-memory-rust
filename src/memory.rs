@@ -52,7 +52,11 @@ impl PartialOrd for MinScored {
 impl Ord for MinScored {
     fn cmp(&self, other: &Self) -> Ordering {
         // Reverse: lowest score = greatest in heap order → popped first.
-        other.0.score.partial_cmp(&self.0.score).unwrap_or(Ordering::Equal)
+        other
+            .0
+            .score
+            .partial_cmp(&self.0.score)
+            .unwrap_or(Ordering::Equal)
     }
 }
 
@@ -84,7 +88,10 @@ impl MemoryStore {
             session,
             embedding,
         };
-        self.entries.write().unwrap_or_else(|e| e.into_inner()).insert(id.clone(), entry);
+        self.entries
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id.clone(), entry);
         id
     }
 
@@ -137,7 +144,11 @@ impl MemoryStore {
 
     /// Delete a memory entry by ID. Returns `true` if the entry existed.
     pub fn delete(&self, id: &str) -> bool {
-        self.entries.write().unwrap_or_else(|e| e.into_inner()).remove(id).is_some()
+        self.entries
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(id)
+            .is_some()
     }
 }
 
@@ -244,12 +255,7 @@ mod tests {
     #[test]
     fn delete_removes_entry() {
         let store = MemoryStore::new();
-        let id = store.store(
-            "temp".to_string(),
-            HashMap::new(),
-            None,
-            vec![1.0],
-        );
+        let id = store.store("temp".to_string(), HashMap::new(), None, vec![1.0]);
 
         assert!(store.delete(&id));
         assert!(!store.delete(&id)); // second delete returns false
@@ -284,7 +290,7 @@ mod tests {
     #[test]
     fn cosine_similarity_with_mismatched_dimensions_is_none() {
         let a = vec![1.0, 0.0, 0.0]; // 3-dim (e.g. provider A)
-        let b = vec![1.0, 0.0];       // 2-dim (e.g. provider B)
+        let b = vec![1.0, 0.0]; // 2-dim (e.g. provider B)
         assert!(cosine_similarity(&a, &b).is_none());
         assert!(cosine_similarity(&b, &a).is_none());
     }
@@ -314,12 +320,7 @@ mod tests {
     #[test]
     fn search_excludes_zero_magnitude_entries() {
         let store = MemoryStore::new();
-        store.store(
-            "valid".to_string(),
-            HashMap::new(),
-            None,
-            vec![1.0, 0.0],
-        );
+        store.store("valid".to_string(), HashMap::new(), None, vec![1.0, 0.0]);
         store.store(
             "zero vector".to_string(),
             HashMap::new(),

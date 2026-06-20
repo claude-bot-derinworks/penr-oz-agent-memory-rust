@@ -1,0 +1,51 @@
+name: CI
+
+# Run on direct pushes to main and on every pull request so regressions are
+# caught before they are merged.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Least-privilege token: the workflow only needs to read the repository.
+permissions:
+  contents: read
+
+# Cancel superseded runs for the same ref to save CI resources.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      # Caches the cargo registry, git dependencies and the target directory,
+      # keyed on the toolchain and Cargo.lock for faster subsequent runs.
+      - name: Cache cargo dependencies and build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Lint with clippy (warnings as errors)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Build
+        run: cargo build --verbose
+
+      - name: Run tests
+        run: cargo test --verbose

@@ -102,7 +102,7 @@ Use the imperative mood and keep the subject line under 72 characters.
 Add session filtering to /api/search endpoint
 
 Extend the Qdrant search handler to accept an optional `session_id`
-query parameter and filter results to that session.
+field in the JSON request body and filter results to that session.
 ```
 
 Prefix with a category when it helps readers scan history:

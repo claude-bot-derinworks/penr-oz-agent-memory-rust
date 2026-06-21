@@ -116,9 +116,7 @@ mod tests {
 
         Mock::given(method("POST"))
             .and(path("/api/embed"))
-            .respond_with(
-                ResponseTemplate::new(500).set_body_string("model not found"),
-            )
+            .respond_with(ResponseTemplate::new(500).set_body_string("model not found"))
             .mount(&server)
             .await;
 
@@ -144,9 +142,6 @@ mod tests {
 
         let provider = OllamaProvider::new(&make_config(&server.uri()));
         let result = provider.embed("hello world").await;
-        assert!(matches!(
-            result,
-            Err(EmbeddingError::InvalidResponse(_))
-        ));
+        assert!(matches!(result, Err(EmbeddingError::InvalidResponse(_))));
     }
 }

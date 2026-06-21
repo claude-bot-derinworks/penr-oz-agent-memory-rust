@@ -197,7 +197,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!(
                 "    [{:.3}] ({}) {}",
                 result.score,
-                result.metadata.get("tag").map(String::as_str).unwrap_or("-"),
+                result
+                    .metadata
+                    .get("tag")
+                    .map(String::as_str)
+                    .unwrap_or("-"),
                 result.text,
             );
         }

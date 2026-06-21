@@ -81,9 +81,7 @@ impl IntoResponse for EmbeddingError {
         let (status, message) = match &self {
             EmbeddingError::BadRequest(_) => (StatusCode::BAD_REQUEST, self.to_string()),
             EmbeddingError::ProviderNotFound(_) => (StatusCode::BAD_REQUEST, self.to_string()),
-            EmbeddingError::AuthenticationError => {
-                (StatusCode::UNAUTHORIZED, self.to_string())
-            }
+            EmbeddingError::AuthenticationError => (StatusCode::UNAUTHORIZED, self.to_string()),
             EmbeddingError::MemoryNotFound(id) => {
                 warn!(memory_id = %id, "Memory entry not found");
                 (StatusCode::NOT_FOUND, self.to_string())
@@ -93,9 +91,7 @@ impl IntoResponse for EmbeddingError {
                     StatusCode::from_u16(*status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
                 (http_status, self.to_string())
             }
-            EmbeddingError::ConfigError(_) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, self.to_string())
-            }
+            EmbeddingError::ConfigError(_) => (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()),
         };
 

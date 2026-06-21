@@ -16,7 +16,10 @@ use crate::{
     error::{EmbeddingError, SessionError, VectorStoreError},
     memory::{MemoryStore, SearchResult as MemorySearchResult},
     session_store::{Session, SessionStore},
-    vector_store::{QdrantStore, SearchResult as QdrantSearchResult, RESERVED_SESSION_ID_KEY_ERROR, RESERVED_TEXT_KEY_ERROR},
+    vector_store::{
+        QdrantStore, SearchResult as QdrantSearchResult, RESERVED_SESSION_ID_KEY_ERROR,
+        RESERVED_TEXT_KEY_ERROR,
+    },
 };
 
 /// Shared application state passed to every handler.
@@ -139,12 +142,13 @@ pub async fn embed(
     Json(body): Json<EmbedRequest>,
 ) -> Result<impl IntoResponse, EmbeddingError> {
     if body.text.is_empty() {
-        return Err(EmbeddingError::BadRequest(
-            EMPTY_TEXT_ERROR.to_string(),
-        ));
+        return Err(EmbeddingError::BadRequest(EMPTY_TEXT_ERROR.to_string()));
     }
 
-    let provider_key = query.provider.as_deref().unwrap_or(state.registry.default_provider());
+    let provider_key = query
+        .provider
+        .as_deref()
+        .unwrap_or(state.registry.default_provider());
     let provider = state.registry.get(Some(provider_key))?;
 
     let embedding = provider.embed(&body.text).await?;
@@ -174,9 +178,7 @@ const EMPTY_SEARCH_QUERY_ERROR: &str = "Query parameter 'q' must not be empty";
 
 fn require_non_empty_text(text: &str) -> Result<(), VectorStoreError> {
     if text.is_empty() {
-        Err(VectorStoreError::BadRequest(
-            EMPTY_TEXT_ERROR.to_string(),
-        ))
+        Err(VectorStoreError::BadRequest(EMPTY_TEXT_ERROR.to_string()))
     } else {
         Ok(())
     }
@@ -258,7 +260,9 @@ pub async fn store_memory_qdrant(
         store
             .get(sid)
             .await
-            .map_err(|e| VectorStoreError::InternalDependencyError(format!("Session store error: {e}")))?
+            .map_err(|e| {
+                VectorStoreError::InternalDependencyError(format!("Session store error: {e}"))
+            })?
             .ok_or_else(|| VectorStoreError::BadRequest(format!("Session '{sid}' not found")))?;
     }
 
@@ -380,9 +384,7 @@ pub async fn store_memory(
     Json(body): Json<StoreMemoryRequest>,
 ) -> Result<impl IntoResponse, EmbeddingError> {
     if body.text.is_empty() {
-        return Err(EmbeddingError::BadRequest(
-            EMPTY_TEXT_ERROR.to_string(),
-        ));
+        return Err(EmbeddingError::BadRequest(EMPTY_TEXT_ERROR.to_string()));
     }
 
     let provider_key = query
@@ -486,9 +488,7 @@ fn constant_time_eq(a: &str, b: &str) -> bool {
 /// Returns `Ok(())` if auth passes or if no key is configured (open access).
 fn validate_session_auth(headers: &HeaderMap, state: &AppState) -> Result<(), SessionError> {
     if let Some(ref expected) = state.session_api_key {
-        let provided = headers
-            .get("x-api-key")
-            .and_then(|v| v.to_str().ok());
+        let provided = headers.get("x-api-key").and_then(|v| v.to_str().ok());
         match provided {
             Some(key) if constant_time_eq(key, expected) => Ok(()),
             Some(_) => Err(SessionError::Unauthorized("Invalid API key".to_string())),
@@ -554,7 +554,10 @@ pub async fn list_sessions(
     validate_session_auth(&headers, &state)?;
 
     let sessions: Vec<Session> = store
-        .list(query.limit.unwrap_or(50).clamp(1, 100), query.offset.unwrap_or(0))
+        .list(
+            query.limit.unwrap_or(50).clamp(1, 100),
+            query.offset.unwrap_or(0),
+        )
         .await?;
 
     Ok((StatusCode::OK, Json(sessions)))
@@ -576,10 +579,7 @@ pub async fn get_session(
         .ok_or(SessionError::NotConfigured)?;
     validate_session_auth(&headers, &state)?;
 
-    let session = store
-        .get(&id)
-        .await?
-        .ok_or_else(|| SessionError::NotFound(id))?;
+    let session = store.get(&id).await?.ok_or(SessionError::NotFound(id))?;
 
     Ok((StatusCode::OK, Json(session)))
 }

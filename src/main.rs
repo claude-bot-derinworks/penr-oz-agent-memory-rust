@@ -6,9 +6,15 @@ mod routes;
 mod session_store;
 mod vector_store;
 
-use std::{net::{IpAddr, SocketAddr}, sync::Arc};
+use std::{
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
+};
 
-use axum::{routing::{delete, get, post}, Router};
+use axum::{
+    routing::{delete, get, post},
+    Router,
+};
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
@@ -17,8 +23,8 @@ use crate::{
     embedding::ProviderRegistry,
     memory::MemoryStore,
     routes::{
-        create_session, delete_memory, embed, get_session, health, list_sessions,
-        search_memory, search_memory_qdrant, store_memory, store_memory_qdrant, AppState,
+        create_session, delete_memory, embed, get_session, health, list_sessions, search_memory,
+        search_memory_qdrant, store_memory, store_memory_qdrant, AppState,
     },
     session_store::SessionStore,
     vector_store::QdrantStore,
@@ -108,7 +114,11 @@ async fn main() {
         .route("/api/sessions/{id}", get(get_session))
         .with_state(state);
 
-    let host: IpAddr = config.server.host.parse().expect("Invalid server host address");
+    let host: IpAddr = config
+        .server
+        .host
+        .parse()
+        .expect("Invalid server host address");
     let addr = SocketAddr::from((host, config.server.port));
 
     info!(%addr, "Starting server");
@@ -117,7 +127,5 @@ async fn main() {
         .await
         .expect("Failed to bind listener");
 
-    axum::serve(listener, app)
-        .await
-        .expect("Server error");
+    axum::serve(listener, app).await.expect("Server error");
 }

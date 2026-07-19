@@ -61,7 +61,9 @@ optional). Note `thiserror` is pinned at 1.x here.
 ## Gotchas
 
 - AGENTS.md claims there is no separate lint step, but CI **does** enforce
-  `cargo fmt --check` and clippy with `-D warnings` — run both before pushing.
+  `cargo fmt --all -- --check` and
+  `cargo clippy --all-targets --all-features -- -D warnings` — run both before
+  pushing.
 - Qdrant is optional: without a `[qdrant]` section, `/api/memory` and `/api/search`
   return 503 while everything else works. `QDRANT_URL` alone can enable Qdrant via
   env; `QDRANT_COLLECTION` / `QDRANT_API_KEY` only override an already-enabled config

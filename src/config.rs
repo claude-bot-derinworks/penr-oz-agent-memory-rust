@@ -131,6 +131,15 @@ fn merge_toml(base: &mut toml::Value, overlay: toml::Value) {
 
 impl Config {
     pub fn load(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let mut config = Self::load_from_files(path)?;
+        config.apply_env_overrides(|key| std::env::var(key).ok());
+        Ok(config)
+    }
+
+    /// Load and merge the config files only, without applying environment
+    /// overrides. Kept separate from [`Config::load`] so the file-merging
+    /// behaviour can be exercised independently of the ambient environment.
+    fn load_from_files(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let contents = fs::read_to_string(path)?;
         let mut value: toml::Value = toml::from_str(&contents)?;
 
@@ -149,31 +158,35 @@ impl Config {
             );
         }
 
-        let mut config: Config = value.try_into()?;
+        Ok(value.try_into()?)
+    }
 
+    /// Apply the `QDRANT_*` / `DATABASE_URL` overrides on top of the merged
+    /// config files. `lookup` resolves a variable name to its value, mirroring
+    /// `std::env::var(..).ok()`; taking it as a parameter keeps the precedence
+    /// rules testable without touching the process environment.
+    fn apply_env_overrides(&mut self, lookup: impl Fn(&str) -> Option<String>) {
         // QDRANT_URL is the sole trigger for enabling Qdrant when no [qdrant]
         // section is present in the config file.  The other two variables only
         // override fields on a config that is already present (either from the
         // TOML or because QDRANT_URL was set above), so they can never
         // accidentally activate Qdrant on their own.
-        if let Ok(url) = std::env::var("QDRANT_URL") {
+        if let Some(url) = lookup("QDRANT_URL") {
             if !url.is_empty() {
-                let qdrant = config.qdrant.get_or_insert_with(QdrantConfig::default);
+                let qdrant = self.qdrant.get_or_insert_with(QdrantConfig::default);
                 qdrant.url = url;
             }
         }
-        if let Some(qdrant) = config.qdrant.as_mut() {
-            if let Ok(collection) = std::env::var("QDRANT_COLLECTION") {
+        if let Some(qdrant) = self.qdrant.as_mut() {
+            if let Some(collection) = lookup("QDRANT_COLLECTION") {
                 if !collection.is_empty() {
                     qdrant.collection = collection;
                 }
             }
-            if let Ok(api_key) = std::env::var("QDRANT_API_KEY") {
+            if let Some(api_key) = lookup("QDRANT_API_KEY") {
                 qdrant.api_key = Some(api_key);
             }
-        } else if std::env::var("QDRANT_COLLECTION").is_ok()
-            || std::env::var("QDRANT_API_KEY").is_ok()
-        {
+        } else if lookup("QDRANT_COLLECTION").is_some() || lookup("QDRANT_API_KEY").is_some() {
             warn!(
                 env_vars = "QDRANT_COLLECTION, QDRANT_API_KEY",
                 "Qdrant env vars set but Qdrant is not configured; they will have no effect"
@@ -182,17 +195,15 @@ impl Config {
 
         // DATABASE_URL enables the session store when no [database] section is
         // present, or overrides the url when one is already configured.
-        if let Ok(url) = std::env::var("DATABASE_URL") {
+        if let Some(url) = lookup("DATABASE_URL") {
             if !url.is_empty() {
-                if let Some(db) = &mut config.database {
+                if let Some(db) = &mut self.database {
                     db.url = url;
                 } else {
-                    config.database = Some(DatabaseConfig { url });
+                    self.database = Some(DatabaseConfig { url });
                 }
             }
         }
-
-        Ok(config)
     }
 }
 
@@ -256,7 +267,7 @@ mod tests {
         let dir = TempDir::new();
         let path = dir.write("config.toml", BASE_CONFIG);
 
-        let config = Config::load(&path).expect("load config");
+        let config = Config::load_from_files(&path).expect("load config");
 
         assert_eq!(config.server.host, "127.0.0.1");
         assert_eq!(config.server.port, 8080);
@@ -284,7 +295,7 @@ mod tests {
             "#,
         );
 
-        let config = Config::load(&path).expect("load config");
+        let config = Config::load_from_files(&path).expect("load config");
 
         // Overridden key wins; untouched sibling key is preserved.
         assert_eq!(config.server.port, 9090);
@@ -318,7 +329,7 @@ mod tests {
             "#,
         );
 
-        let config = Config::load(&path).expect("load config");
+        let config = Config::load_from_files(&path).expect("load config");
 
         // Existing provider: only the overridden field changes.
         let ollama = &config.embedding.providers["ollama"];
@@ -338,6 +349,97 @@ mod tests {
         let path = dir.write("config.toml", BASE_CONFIG);
         dir.write("config.local.toml", "not valid toml [");
 
-        assert!(Config::load(&path).is_err());
+        assert!(Config::load_from_files(&path).is_err());
+    }
+
+    /// Build an environment lookup from a fixed key/value list, so these tests
+    /// neither read nor mutate the process environment.
+    fn env(vars: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
+        let vars: Vec<(String, String)> = vars
+            .iter()
+            .map(|(name, value)| ((*name).to_string(), (*value).to_string()))
+            .collect();
+        move |key| {
+            vars.iter()
+                .find(|(name, _)| name == key)
+                .map(|(_, value)| value.clone())
+        }
+    }
+
+    #[test]
+    fn qdrant_url_env_enables_qdrant_when_absent_from_files() {
+        let dir = TempDir::new();
+        let path = dir.write("config.toml", BASE_CONFIG);
+        let mut config = Config::load_from_files(&path).expect("load config");
+        assert!(config.qdrant.is_none());
+
+        config.apply_env_overrides(env(&[
+            ("QDRANT_URL", "http://qdrant.internal:6333"),
+            ("QDRANT_COLLECTION", "from-env"),
+            ("QDRANT_API_KEY", "qdrant-key"),
+        ]));
+
+        let qdrant = config.qdrant.expect("qdrant enabled by env");
+        assert_eq!(qdrant.url, "http://qdrant.internal:6333");
+        assert_eq!(qdrant.collection, "from-env");
+        assert_eq!(qdrant.api_key.as_deref(), Some("qdrant-key"));
+        assert_eq!(qdrant.dimensions, 768); // default, untouched by env
+    }
+
+    #[test]
+    fn qdrant_collection_env_alone_does_not_enable_qdrant() {
+        let dir = TempDir::new();
+        let path = dir.write("config.toml", BASE_CONFIG);
+        let mut config = Config::load_from_files(&path).expect("load config");
+
+        config.apply_env_overrides(env(&[
+            ("QDRANT_COLLECTION", "from-env"),
+            ("QDRANT_API_KEY", "qdrant-key"),
+        ]));
+
+        assert!(config.qdrant.is_none());
+    }
+
+    #[test]
+    fn env_overrides_win_over_local_override_file() {
+        let dir = TempDir::new();
+        let path = dir.write("config.toml", BASE_CONFIG);
+        dir.write(
+            "config.local.toml",
+            r#"
+                [qdrant]
+                url = "http://from-file:6333"
+                collection = "from-file"
+
+                [database]
+                url = "sqlite://from-file.db"
+            "#,
+        );
+
+        let mut config = Config::load_from_files(&path).expect("load config");
+        config.apply_env_overrides(env(&[
+            ("QDRANT_URL", "http://from-env:6333"),
+            ("DATABASE_URL", "sqlite://from-env.db"),
+        ]));
+
+        let qdrant = config.qdrant.expect("qdrant configured");
+        assert_eq!(qdrant.url, "http://from-env:6333");
+        assert_eq!(qdrant.collection, "from-file"); // not set in env
+        assert_eq!(
+            config.database.expect("database").url,
+            "sqlite://from-env.db"
+        );
+    }
+
+    #[test]
+    fn empty_env_values_are_ignored() {
+        let dir = TempDir::new();
+        let path = dir.write("config.toml", BASE_CONFIG);
+        let mut config = Config::load_from_files(&path).expect("load config");
+
+        config.apply_env_overrides(env(&[("QDRANT_URL", ""), ("DATABASE_URL", "")]));
+
+        assert!(config.qdrant.is_none());
+        assert!(config.database.is_none());
     }
 }

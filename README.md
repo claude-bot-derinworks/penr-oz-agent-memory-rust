@@ -27,7 +27,7 @@ cp .env.example .env
 
 Edit `.env` to change default ports or set `QDRANT_API_KEY`. If you change a port, update the corresponding URL in your `config.local.toml` override too (e.g. `[qdrant].url` or `[embedding.providers.ollama].base_url` — see [Local overrides](#local-overrides-configlocaltoml)).
 
-> **Note:** `.env` is consumed by Docker Compose for container configuration only. The Rust server (`cargo run`) reads environment variables from the shell — export any server-level vars (e.g. `SESSION_API_KEY`) in your shell, or set the corresponding keys in your git-ignored `config.local.toml`.
+> **Note:** `.env` is consumed by Docker Compose for container configuration only. The Rust server (`cargo run`) reads environment variables from the shell — export any server-level vars in your shell. `SESSION_API_KEY` is **environment-only**: it has no `config.toml` / `config.local.toml` equivalent, and an unknown key in TOML is silently ignored. `QDRANT_URL`, `QDRANT_COLLECTION`, `QDRANT_API_KEY` and `DATABASE_URL` do have TOML equivalents (`[qdrant]`, `[database]`) and take precedence over both files.
 
 ### 2. Start the stack
 
@@ -239,11 +239,18 @@ git-ignored and merged over `config.toml` at startup:
   override file alone.
 - Environment variables (`QDRANT_URL`, `QDRANT_COLLECTION`, `QDRANT_API_KEY`,
   `DATABASE_URL`) still override both files.
+- `SESSION_API_KEY` is environment-only — there is no TOML key for it, and an
+  unknown key in a config file is silently ignored, so setting it there leaves
+  the session endpoints unauthenticated.
 
-Copy-paste example:
+Copy-paste example (switches the default provider to OpenAI, so the Qdrant
+`dimensions` below match the active embedding model):
 
 ```sh
 cat > config.local.toml <<'EOF'
+[embedding]
+default_provider = "openai"
+
 [embedding.providers.openai]
 type     = "openai"
 base_url = "https://api.openai.com"
@@ -253,7 +260,7 @@ model    = "text-embedding-3-small"
 [qdrant]
 url        = "http://localhost:6333"
 collection = "agent_memory"
-dimensions = 1536
+dimensions = 1536   # text-embedding-3-small; use 768 if you keep Ollama
 distance   = "Cosine"
 EOF
 ```
@@ -308,8 +315,10 @@ sessions:
 url = "sqlite://sessions.db"
 ```
 
-Set the `SESSION_API_KEY` environment variable to require an `X-Api-Key` header
-on all session endpoints.
+Export the `SESSION_API_KEY` environment variable to require an `X-Api-Key`
+header on all session endpoints.  This one is environment-only — it has no
+config-file equivalent, so setting it in `config.toml` or `config.local.toml`
+has no effect.
 
 ---
 

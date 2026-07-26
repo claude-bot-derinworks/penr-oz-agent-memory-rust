@@ -28,7 +28,7 @@ with optional API-key auth. Single binary: `penr-oz-agent-memory` (`src/main.rs`
 | Path | Responsibility |
 |------|---------------|
 | `src/main.rs` | Startup, `Router` wiring, `AppState`; all routes registered here |
-| `src/config.rs` | `Config` from `config.toml` + `QDRANT_*` / `DATABASE_URL` env overrides |
+| `src/config.rs` | `Config` from `config.toml` + git-ignored `config.local.toml` merge + `QDRANT_*` / `DATABASE_URL` env overrides |
 | `src/routes.rs` | All axum handlers, request/response types, session auth helper |
 | `src/memory.rs` | In-memory `MemoryStore` (`/memory` endpoints) |
 | `src/vector_store.rs` | `QdrantStore` (`/api/memory`, `/api/search`) |

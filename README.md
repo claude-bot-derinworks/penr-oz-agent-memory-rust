@@ -25,9 +25,9 @@ for local embeddings.
 cp .env.example .env
 ```
 
-Edit `.env` to change default ports or set `QDRANT_API_KEY`. If you change a port, update the corresponding URL in `config.toml` too (e.g. `[qdrant].url` or `[embedding.providers.ollama].base_url`).
+Edit `.env` to change default ports or set `QDRANT_API_KEY`. If you change a port, update the corresponding URL in your `config.local.toml` override too (e.g. `[qdrant].url` or `[embedding.providers.ollama].base_url` — see [Local overrides](#local-overrides-configlocaltoml)).
 
-> **Note:** `.env` is consumed by Docker Compose for container configuration only. The Rust server (`cargo run`) reads environment variables from the shell — export any server-level vars (e.g. `SESSION_API_KEY`) in your shell, or set them directly in `config.toml`.
+> **Note:** `.env` is consumed by Docker Compose for container configuration only. The Rust server (`cargo run`) reads environment variables from the shell — export any server-level vars (e.g. `SESSION_API_KEY`) in your shell, or set the corresponding keys in your git-ignored `config.local.toml`.
 
 ### 2. Start the stack
 
@@ -52,11 +52,13 @@ Qdrant will be available at `http://localhost:6333` and Ollama (if started) at
 docker compose exec ollama ollama pull nomic-embed-text
 ```
 
-### 4. Enable Qdrant in `config.toml`
+### 4. Enable Qdrant via `config.local.toml`
 
-Uncomment the `[qdrant]` section so the server connects to the container:
+Create a git-ignored `config.local.toml` next to `config.toml` so the server
+connects to the container — do not edit the tracked `config.toml`:
 
 ```toml
+# config.local.toml (git-ignored)
 [qdrant]
 url        = "http://localhost:6333"
 collection = "agent_memory"
@@ -64,7 +66,12 @@ dimensions = 768
 distance   = "Cosine"
 ```
 
-If you are using the Ollama container, the `base_url` in `[embedding.providers.ollama]` should be `http://localhost:11434`.
+The server merges this file over `config.toml` at startup (see
+[Local overrides](#local-overrides-configlocaltoml)).
+
+If you are using the Ollama container, the default
+`[embedding.providers.ollama]` `base_url` of `http://localhost:11434` already
+matches — override it in `config.local.toml` only if you changed the port.
 
 ### 5. Start the server
 
@@ -87,22 +94,23 @@ docker compose down -v       # stop containers and delete data volumes
 
 ### 1. Configure the server
 
-Copy and edit `config.toml`.  The defaults use [Ollama](https://ollama.com/)
-with the `nomic-embed-text` model for embeddings and keep everything in-memory
-(no Qdrant required for the `/memory` endpoints).
+The tracked `config.toml` ships with working defaults: [Ollama](https://ollama.com/)
+with the `nomic-embed-text` model for embeddings and everything in-memory
+(no Qdrant required for the `/memory` endpoints), so often no configuration is
+needed at all.
+
+To customise anything, create a git-ignored `config.local.toml` next to
+`config.toml` containing just the keys you want to change — do not edit the
+tracked `config.toml` (see
+[Local overrides](#local-overrides-configlocaltoml)):
 
 ```toml
+# config.local.toml (git-ignored)
 [server]
-host = "127.0.0.1"
-port = 8080
-
-[embedding]
-default_provider = "ollama"
+port = 9090
 
 [embedding.providers.ollama]
-type     = "ollama"
 base_url = "http://localhost:11434"
-model    = "nomic-embed-text"
 ```
 
 Pull the embedding model if you haven't already:
@@ -217,10 +225,48 @@ Demo complete.  Memory lifecycle demonstrated:
 
 ## Configuration reference
 
+### Local overrides (`config.local.toml`)
+
+The tracked `config.toml` is a reference file with safe defaults — never edit
+it for local customisation (local edits pollute `git status`, are easy to
+commit by accident, and make upstream merges harder). Instead, put your
+machine-specific settings in a `config.local.toml` next to it. The file is
+git-ignored and merged over `config.toml` at startup:
+
+- Tables merge key-by-key, so you only list the keys you want to change.
+- Scalar values (and arrays) in the override replace the base values.
+- Whole optional sections (`[qdrant]`, `[database]`) can be enabled from the
+  override file alone.
+- Environment variables (`QDRANT_URL`, `QDRANT_COLLECTION`, `QDRANT_API_KEY`,
+  `DATABASE_URL`) still override both files.
+
+Copy-paste example:
+
+```sh
+cat > config.local.toml <<'EOF'
+[embedding.providers.openai]
+type     = "openai"
+base_url = "https://api.openai.com"
+api_key  = "sk-your-real-key"
+model    = "text-embedding-3-small"
+
+[qdrant]
+url        = "http://localhost:6333"
+collection = "agent_memory"
+dimensions = 1536
+distance   = "Cosine"
+EOF
+```
+
+The override file is looked up next to the active config file: with
+`CONFIG_PATH=/etc/agent/config.toml` the server reads
+`/etc/agent/config.local.toml`.
+
 ### Embedding providers
 
-The server supports multiple embedding providers.  Set the active provider in
-`config.toml` and optionally override it per-request with `?provider=<name>`.
+The server supports multiple embedding providers.  Set the active provider via
+`default_provider` (in `config.toml` or your `config.local.toml` override) and
+optionally override it per-request with `?provider=<name>`.
 
 | Provider | Type      | Default model            | Dimensions |
 |----------|-----------|--------------------------|------------|
@@ -237,11 +283,13 @@ The server supports multiple embedding providers.  Set the active provider in
 
 ### Qdrant vector store (optional)
 
-Uncomment the `[qdrant]` section in `config.toml` to enable persistent vector
-storage.  Without it the `/api/memory` and `/api/search` endpoints return 503,
-but all other endpoints (including `/memory`) continue to work.
+Add a `[qdrant]` section to your git-ignored `config.local.toml` to enable
+persistent vector storage.  Without it the `/api/memory` and `/api/search`
+endpoints return 503, but all other endpoints (including `/memory`) continue
+to work.
 
 ```toml
+# config.local.toml (git-ignored)
 [qdrant]
 url        = "http://localhost:6333"
 collection = "agent_memory"
@@ -251,9 +299,11 @@ distance   = "Cosine"
 
 ### Session store (optional)
 
-Add a `[database]` section to enable SQLite-backed sessions:
+Add a `[database]` section to your `config.local.toml` to enable SQLite-backed
+sessions:
 
 ```toml
+# config.local.toml (git-ignored)
 [database]
 url = "sqlite://sessions.db"
 ```

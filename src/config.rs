@@ -140,8 +140,14 @@ impl Config {
     /// overrides. Kept separate from [`Config::load`] so the file-merging
     /// behaviour can be exercised independently of the ambient environment.
     fn load_from_files(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        let contents = fs::read_to_string(path)?;
-        let mut value: toml::Value = toml::from_str(&contents)?;
+        // Every failure below names the file it came from: two files are read
+        // here, and the caller only knows the path of the tracked one, so a bare
+        // io/toml error would blame `config.toml` for a typo in
+        // `config.local.toml`.
+        let contents =
+            fs::read_to_string(path).map_err(|e| format!("Failed to read '{path}': {e}"))?;
+        let mut value: toml::Value =
+            toml::from_str(&contents).map_err(|e| format!("Failed to parse '{path}': {e}"))?;
 
         // Merge the optional git-ignored local override file (e.g.
         // `config.local.toml`) over the tracked config so users never have to
@@ -149,8 +155,11 @@ impl Config {
         // overrides below still take precedence over both files.
         let override_path = local_override_path(path);
         if override_path.is_file() {
-            let override_contents = fs::read_to_string(&override_path)?;
-            let override_value: toml::Value = toml::from_str(&override_contents)?;
+            let display = override_path.display();
+            let override_contents = fs::read_to_string(&override_path)
+                .map_err(|e| format!("Failed to read '{display}': {e}"))?;
+            let override_value: toml::Value = toml::from_str(&override_contents)
+                .map_err(|e| format!("Failed to parse '{display}': {e}"))?;
             merge_toml(&mut value, override_value);
             info!(
                 path = %override_path.display(),
@@ -344,12 +353,36 @@ mod tests {
     }
 
     #[test]
-    fn invalid_override_file_is_an_error() {
+    fn invalid_override_file_is_an_error_naming_the_override_file() {
         let dir = TempDir::new();
         let path = dir.write("config.toml", BASE_CONFIG);
         dir.write("config.local.toml", "not valid toml [");
 
-        assert!(Config::load_from_files(&path).is_err());
+        let error = Config::load_from_files(&path)
+            .expect_err("malformed override must fail")
+            .to_string();
+
+        // The caller only knows the tracked path, so the error has to say which
+        // of the two files is actually broken.
+        assert!(
+            error.contains("config.local.toml"),
+            "error should name the override file: {error}"
+        );
+    }
+
+    #[test]
+    fn invalid_base_file_is_an_error_naming_the_base_file() {
+        let dir = TempDir::new();
+        let path = dir.write("config.toml", "not valid toml [");
+
+        let error = Config::load_from_files(&path)
+            .expect_err("malformed base config must fail")
+            .to_string();
+
+        assert!(
+            error.contains("config.toml") && !error.contains("config.local.toml"),
+            "error should name the base file: {error}"
+        );
     }
 
     /// Build an environment lookup from a fixed key/value list, so these tests

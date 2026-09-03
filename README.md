@@ -92,12 +92,31 @@ docker compose down -v       # stop containers and delete data volumes
 
 ## Quick start (without Docker)
 
-### 1. Configure the server
+### 1. Run an embedding provider
 
-The tracked `config.toml` ships with working defaults: [Ollama](https://ollama.com/)
-with the `nomic-embed-text` model for embeddings and everything in-memory
-(no Qdrant required for the `/memory` endpoints), so often no configuration is
-needed at all.
+Every endpoint that turns text into a vector (`/api/embed`, `POST /memory`,
+`GET /memory/search`, and the Qdrant endpoints) calls the configured embedding
+provider, so one has to be reachable before the server is useful — there is no
+built-in or offline fallback. The tracked `config.toml` defaults to a local
+[Ollama](https://ollama.com/) at `http://localhost:11434` with the
+`nomic-embed-text` model, so install and start Ollama and pull the model:
+
+```sh
+ollama pull nomic-embed-text   # `ollama serve` must be running
+```
+
+If the provider is not running, those endpoints return **502 Bad Gateway** with
+the provider URL and the underlying cause (e.g. `Connection refused`) in the
+`error` field; `/health` and `DELETE /memory/{id}` keep working because they
+never embed anything. To use OpenAI or Anthropic instead, set
+`default_provider` and the matching `api_key` in `config.local.toml` (see
+[Local overrides](#local-overrides-configlocaltoml)).
+
+### 2. Configure the server (optional)
+
+Apart from the provider above, the tracked `config.toml` ships with working
+defaults: everything is in-memory, so no Qdrant is required for the `/memory`
+endpoints.
 
 To customise anything, create a git-ignored `config.local.toml` next to
 `config.toml` containing just the keys you want to change — do not edit the
@@ -113,13 +132,7 @@ port = 9090
 base_url = "http://localhost:11434"
 ```
 
-Pull the embedding model if you haven't already:
-
-```sh
-ollama pull nomic-embed-text
-```
-
-### 2. Start the server
+### 3. Start the server
 
 ```sh
 cargo run
@@ -171,6 +184,11 @@ Pass a custom server URL as the first argument if needed:
 ```sh
 cargo run --example agent_client http://localhost:8080
 ```
+
+The example stores and searches memories, so the server's embedding provider
+must be reachable. If it is not, the example stops at step 2 with
+`Status(502, ...)` on `POST /memory` — start the provider (see
+[Quick start step 1](#1-run-an-embedding-provider)) and re-run.
 
 ### Example output
 
